@@ -41,7 +41,7 @@ var (
 	ErrRequestUnknownCode      = errors.New("request failed with unknown code")
 )
 
-func ServerHandshake(rw io.ReadWriter, authenticator auth.Authenticator) (addr string, command Command, err error) {
+func ServerHandshake(rw net.Conn, authenticator auth.Authenticator) (addr string, command Command, err error) {
 	var req [8]byte
 	if _, err = io.ReadFull(rw, req[:]); err != nil {
 		return
@@ -86,7 +86,7 @@ func ServerHandshake(rw io.ReadWriter, authenticator auth.Authenticator) (addr s
 	}
 
 	// SOCKS4 only support USERID auth.
-	if authenticator == nil || authenticator.Verify(string(userID), "") {
+	if authenticator == nil || authenticator.IsSkip(rw.RemoteAddr().String()) || authenticator.Verify(string(userID), "") {
 		code = RequestGranted
 	} else {
 		code = RequestIdentdMismatched

@@ -100,7 +100,8 @@ func HandleConn(c net.Conn, in chan<- C.ConnContext, cache *cache.LruCache) {
 
 func authenticate(request *http.Request, cache *cache.LruCache) *http.Response {
 	authenticator := authStore.Authenticator()
-	if authenticator != nil {
+	if authenticator != nil && !authenticator.IsSkip(request.RemoteAddr) {
+
 		credential := parseBasicProxyAuthorization(request)
 		if credential == "" {
 			resp := responseWith(request, http.StatusProxyAuthRequired)

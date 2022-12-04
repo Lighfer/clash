@@ -93,16 +93,17 @@ type Experimental struct {
 
 // Config is clash config manager
 type Config struct {
-	General      *General
-	DNS          *DNS
-	Experimental *Experimental
-	Hosts        *trie.DomainTrie
-	Profile      *Profile
-	Rules        []C.Rule
-	Users        []auth.AuthUser
-	Proxies      map[string]C.Proxy
-	Providers    map[string]providerTypes.ProxyProvider
-	Tunnels      []Tunnel
+	General                *General
+	DNS                    *DNS
+	Experimental           *Experimental
+	Hosts                  *trie.DomainTrie
+	Profile                *Profile
+	Rules                  []C.Rule
+	Users                  []auth.AuthUser
+	SkipAuthenticationCIDR []*net.IPNet
+	Proxies                map[string]C.Proxy
+	Providers              map[string]providerTypes.ProxyProvider
+	Tunnels                []Tunnel
 }
 
 type RawDNS struct {
@@ -187,23 +188,24 @@ func (t *Tunnel) UnmarshalYAML(unmarshal func(any) error) error {
 }
 
 type RawConfig struct {
-	Port               int          `yaml:"port"`
-	SocksPort          int          `yaml:"socks-port"`
-	RedirPort          int          `yaml:"redir-port"`
-	TProxyPort         int          `yaml:"tproxy-port"`
-	MixedPort          int          `yaml:"mixed-port"`
-	Authentication     []string     `yaml:"authentication"`
-	AllowLan           bool         `yaml:"allow-lan"`
-	BindAddress        string       `yaml:"bind-address"`
-	Mode               T.TunnelMode `yaml:"mode"`
-	LogLevel           log.LogLevel `yaml:"log-level"`
-	IPv6               bool         `yaml:"ipv6"`
-	ExternalController string       `yaml:"external-controller"`
-	ExternalUI         string       `yaml:"external-ui"`
-	Secret             string       `yaml:"secret"`
-	Interface          string       `yaml:"interface-name"`
-	RoutingMark        int          `yaml:"routing-mark"`
-	Tunnels            []Tunnel     `yaml:"tunnels"`
+	Port                   int          `yaml:"port"`
+	SocksPort              int          `yaml:"socks-port"`
+	RedirPort              int          `yaml:"redir-port"`
+	TProxyPort             int          `yaml:"tproxy-port"`
+	MixedPort              int          `yaml:"mixed-port"`
+	Authentication         []string     `yaml:"authentication"`
+	SkipAuthenticationCIDR []string     `yaml:"skip-authentication-cidr"`
+	AllowLan               bool         `yaml:"allow-lan"`
+	BindAddress            string       `yaml:"bind-address"`
+	Mode                   T.TunnelMode `yaml:"mode"`
+	LogLevel               log.LogLevel `yaml:"log-level"`
+	IPv6                   bool         `yaml:"ipv6"`
+	ExternalController     string       `yaml:"external-controller"`
+	ExternalUI             string       `yaml:"external-ui"`
+	Secret                 string       `yaml:"secret"`
+	Interface              string       `yaml:"interface-name"`
+	RoutingMark            int          `yaml:"routing-mark"`
+	Tunnels                []Tunnel     `yaml:"tunnels"`
 
 	ProxyProvider map[string]map[string]any `yaml:"proxy-providers"`
 	Hosts         map[string]string         `yaml:"hosts"`
@@ -228,15 +230,16 @@ func Parse(buf []byte) (*Config, error) {
 func UnmarshalRawConfig(buf []byte) (*RawConfig, error) {
 	// config with default value
 	rawCfg := &RawConfig{
-		AllowLan:       false,
-		BindAddress:    "*",
-		Mode:           T.Rule,
-		Authentication: []string{},
-		LogLevel:       log.INFO,
-		Hosts:          map[string]string{},
-		Rule:           []string{},
-		Proxy:          []map[string]any{},
-		ProxyGroup:     []map[string]any{},
+		AllowLan:               false,
+		BindAddress:            "*",
+		Mode:                   T.Rule,
+		Authentication:         []string{},
+		SkipAuthenticationCIDR: []string{},
+		LogLevel:               log.INFO,
+		Hosts:                  map[string]string{},
+		Rule:                   []string{},
+		Proxy:                  []map[string]any{},
+		ProxyGroup:             []map[string]any{},
 		DNS: RawDNS{
 			Enable:      false,
 			UseHosts:    true,
@@ -301,6 +304,10 @@ func ParseRawConfig(rawCfg *RawConfig) (*Config, error) {
 	config.DNS = dnsCfg
 
 	config.Users = parseAuthentication(rawCfg.Authentication)
+	config.SkipAuthenticationCIDR, err = parseSkipAuthenticationCIDR(rawCfg.SkipAuthenticationCIDR)
+	if err != nil {
+		return nil, err
+	}
 
 	config.Tunnels = rawCfg.Tunnels
 	// verify tunnels
@@ -727,4 +734,16 @@ func parseAuthentication(rawRecords []string) []auth.AuthUser {
 		}
 	}
 	return users
+}
+
+func parseSkipAuthenticationCIDR(rawRecords []string) ([]*net.IPNet, error) {
+	ipNets := []*net.IPNet{}
+	for _, line := range rawRecords {
+		_, ipNet, err := net.ParseCIDR(line)
+		if err != nil {
+			return nil, err
+		}
+		ipNets = append(ipNets, ipNet)
+	}
+	return ipNets, nil
 }

@@ -121,7 +121,7 @@ func ServerHandshake(rw net.Conn, authenticator auth.Authenticator) (addr Addr, 
 	}
 
 	// write VER METHOD
-	if authenticator != nil {
+	if authenticator != nil || !authenticator.IsSkip(rw.RemoteAddr().String()) {
 		if _, err = rw.Write([]byte{5, 2}); err != nil {
 			return
 		}
